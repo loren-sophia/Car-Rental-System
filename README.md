@@ -39,7 +39,7 @@ car_rental/
 
 ```bash
 # 1. Navigate to the project folder
-cd car_rental
+cd Car-Rental-System-main
 
 # 2. (Optional) Load sample data
 python seed_data.py
@@ -83,16 +83,3 @@ python main.py
 - Late rentals are detected via CASE in the `rental_summary` VIEW
 
 ---
-
-## 🌱 Git Commit Strategy (suggested)
-
-1. `init: project structure and database schema`
-2. `feat: vehicle CRUD and search`
-3. `feat: customer CRUD and search`
-4. `feat: reservation creation with conflict check`
-5. `feat: rental workflow with cost calculation`
-6. `feat: dashboard summary cards`
-7. `feat: reports view with monthly and status summaries`
-8. `fix: vehicle status auto-update on rental completion`
-9. `refactor: modularize validators and query helpers`
-10. `docs: add README and seed data script`
