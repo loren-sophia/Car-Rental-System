@@ -9,87 +9,154 @@ from database.customer_queries import get_all_customers
 from database.vehicle_queries import get_available_vehicles, get_vehicle_by_id
 from utils.date_picker import DatePickerButton
 
-COLUMNS = ("ID", "Cliente", "Vehiculo", "Inicio", "Fin", "Costo Total", "Estado")
+COLUMNS = ("ID", "Customer", "Vehicle", "Start", "End", "Total Cost", "Status")
 STATUSES = ["All", "active", "completed", "late"]
 
 STATUS_LABELS = {
-    "All": "Todos", "active": "Activo",
-    "completed": "Completado", "late": "Vencido"
+    "All": "All",
+    "active": "Active",
+    "completed": "Completed",
+    "late": "Late"
 }
 
 
 class RentalsView(tk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, bg="#f0f2f5")
+        super().__init__(parent, bg="#eef1f6")
         self.selected_id = None
+
+        self.style = ttk.Style()
+        self._configure_styles()
+
         self.build()
 
-    # ── Layout ────────────────────────────────────────────────────────────────
+    # ── Styles ─────────────────────────────────────────────
+
+    def _configure_styles(self):
+        self.style.theme_use("clam")
+
+        self.style.configure("Title.TLabel",
+                             font=("Segoe UI", 20, "bold"),
+                             background="#eef1f6",
+                             foreground="#1a1a2e")
+
+        self.style.configure("Subtitle.TLabel",
+                             font=("Segoe UI", 10),
+                             background="#eef1f6")
+
+        self.style.configure("Primary.TButton",
+                             font=("Segoe UI", 10, "bold"),
+                             padding=6)
+
+        self.style.configure("Treeview",
+                             font=("Segoe UI", 10),
+                             rowheight=30,
+                             background="white",
+                             fieldbackground="white")
+
+        self.style.configure("Treeview.Heading",
+                             font=("Segoe UI", 10, "bold"),
+                             background="#4a90d9",
+                             foreground="white")
+
+    # ── Layout ─────────────────────────────────────────────
 
     def build(self):
-        tk.Label(self, text="🔑 Rentas", font=("Helvetica", 18, "bold"),
-                 bg="#f0f2f5", fg="#1a1a2e").pack(pady=(16, 6))
+        # Header
+        header = tk.Frame(self, bg="#eef1f6")
+        header.pack(fill="x", padx=20, pady=(15, 5))
 
-        # Filter bar
-        filter_frame = tk.Frame(self, bg="#f0f2f5")
-        filter_frame.pack(fill="x", padx=20, pady=4)
-        tk.Label(filter_frame, text="Estado:", bg="#f0f2f5").pack(side="left")
+        ttk.Label(header, text="🔑 Rentals Management",
+                  style="Title.TLabel").pack(side="left")
+
+        ttk.Button(header, text="Refresh",
+                   style="Primary.TButton",
+                   command=self.load_rentals).pack(side="right")
+
+        # ── Filter Card ─────────────────────────────
+        filter_card = tk.Frame(self, bg="white", bd=1, relief="solid")
+        filter_card.pack(fill="x", padx=20, pady=8)
+
+        inner = tk.Frame(filter_card, bg="white")
+        inner.pack(padx=10, pady=8, fill="x")
+
+        ttk.Label(inner, text="Filter by status:",
+                  style="Subtitle.TLabel").pack(side="left")
+
         self.filter_status = ttk.Combobox(
-            filter_frame,
+            inner,
             values=[STATUS_LABELS[s] for s in STATUSES],
-            state="readonly", width=14
+            state="readonly",
+            width=15
         )
-        self.filter_status.set("Todos")
-        self.filter_status.pack(side="left", padx=6)
-        tk.Button(filter_frame, text="Filtrar", command=self.load_rentals,
-                  bg="#4a90d9", fg="white", relief="flat", padx=8).pack(side="left")
+        self.filter_status.set("All")
+        self.filter_status.pack(side="left", padx=8)
 
-        # Treeview
-        tree_frame = tk.Frame(self)
-        tree_frame.pack(fill="both", expand=True, padx=20, pady=6)
+        ttk.Button(inner, text="Apply",
+                   style="Primary.TButton",
+                   command=self.load_rentals).pack(side="left")
 
-        self.tree = ttk.Treeview(tree_frame, columns=COLUMNS, show="headings", height=14)
+        # ── Table Card ─────────────────────────────
+        table_card = tk.Frame(self, bg="white", bd=1, relief="solid")
+        table_card.pack(fill="both", expand=True, padx=20, pady=10)
+
+        inner = tk.Frame(table_card, bg="white")
+        inner.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.tree = ttk.Treeview(inner, columns=COLUMNS, show="headings")
+
         for col in COLUMNS:
             self.tree.heading(col, text=col)
-            self.tree.column(col, width=110, anchor="center")
-        self.tree.column("ID", width=40)
-        self.tree.column("Cliente", width=150)
-        self.tree.column("Vehiculo", width=160)
+            self.tree.column(col, anchor="center", width=120)
 
-        sb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=sb.set)
+        self.tree.column("ID", width=50)
+        self.tree.column("Customer", width=180)
+        self.tree.column("Vehicle", width=200)
+
         self.tree.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+
+        scroll = ttk.Scrollbar(inner, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscroll=scroll.set)
+        scroll.pack(side="right", fill="y")
+
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
 
-        # Action buttons
-        btn_frame = tk.Frame(self, bg="#f0f2f5")
-        btn_frame.pack(pady=6)
-        tk.Button(btn_frame, text="➕ Nueva Renta", command=self.open_form,
-                  bg="#27ae60", fg="white", font=("Helvetica", 10),
-                  relief="flat", padx=12, pady=6, cursor="hand2").pack(side="left", padx=6)
-        tk.Button(btn_frame, text="✅ Completar Renta", command=self.complete,
-                  bg="#2980b9", fg="white", font=("Helvetica", 10),
-                  relief="flat", padx=12, pady=6, cursor="hand2").pack(side="left", padx=6)
+        # ── Buttons ─────────────────────────────
+        btn_frame = tk.Frame(self, bg="#eef1f6")
+        btn_frame.pack(pady=10)
+
+        ttk.Button(btn_frame, text="➕ New Rental",
+                   style="Primary.TButton",
+                   command=self.open_form).pack(side="left", padx=6)
+
+        ttk.Button(btn_frame, text="✔ Complete Rental",
+                   style="Primary.TButton",
+                   command=self.complete).pack(side="left", padx=6)
 
         self.load_rentals()
 
+    # ── Logic ─────────────────────────────────────────────
+
     def load_rentals(self):
         self.tree.delete(*self.tree.get_children())
-        # Map display label back to key
+
         reverse = {v: k for k, v in STATUS_LABELS.items()}
         key = reverse.get(self.filter_status.get(), "All")
         filters = {} if key == "All" else {"status": key}
+
         for r in get_all_rentals(filters or None):
             cost = f"${r['total_cost']:.2f}" if r["total_cost"] else "—"
-            tag  = r["rental_status"]
+            tag = r["rental_status"]
+
             self.tree.insert("", "end", values=(
                 r["id"], r["customer_name"], r["vehicle"],
                 r["start_date"], r["end_date"], cost, r["rental_status"]
             ), tags=(tag,))
-        self.tree.tag_configure("active",    foreground="#27ae60")
-        self.tree.tag_configure("late",      foreground="#e74c3c")
-        self.tree.tag_configure("completed", foreground="#aaaaaa")
+
+        self.tree.tag_configure("active", foreground="#2e7d32")
+        self.tree.tag_configure("late", foreground="#c62828")
+        self.tree.tag_configure("completed", foreground="#757575")
+
         self.selected_id = None
 
     def on_select(self, event):
@@ -99,12 +166,14 @@ class RentalsView(tk.Frame):
 
     def complete(self):
         if not self.selected_id:
-            messagebox.showwarning("Sin seleccion", "Selecciona una renta primero.")
+            messagebox.showwarning("No Selection", "Select a rental first.")
             return
-        if messagebox.askyesno("Confirmar", "¿Marcar esta renta como completada?"):
+
+        if messagebox.askyesno("Confirm", "Mark this rental as completed?"):
             ok, msg = complete_rental(self.selected_id)
+
             if ok:
-                messagebox.showinfo("Exito", msg)
+                messagebox.showinfo("Success", msg)
                 self.load_rentals()
             else:
                 messagebox.showerror("Error", msg)
@@ -113,228 +182,128 @@ class RentalsView(tk.Frame):
         RentalForm(self, on_save=self.load_rentals)
 
 
-# ── New Rental Form ───────────────────────────────────────────────────────────
+# ── FORM ─────────────────────────────────────────────
 
 class RentalForm(tk.Toplevel):
-    """
-    Guided rental form:
-      1. Select customer + vehicle + dates
-      2. Click "Calcular Costo"  → shows breakdown, enables Confirm
-      3. Click "Confirmar Renta" → creates the rental
-    """
-
     def __init__(self, parent, on_save):
         super().__init__(parent)
-        self.title("Nueva Renta")
+
+        self.title("New Rental")
         self.resizable(False, False)
-        self.configure(bg="#f0f2f5")
+        self.configure(bg="#eef1f6")
+
         self.on_save = on_save
 
         self.customers = get_all_customers()
-        self.vehicles  = get_available_vehicles()
+        self.vehicles = get_available_vehicles()
+
         self._cost_calculated = False
-        self._days  = 0
-        self._total = 0.0
 
         self._build()
         self.grab_set()
 
-    # ── Layout ────────────────────────────────────────────────────────────────
-
     def _build(self):
-        # ── Title bar ─────────────────────────────────────────────────────────
-        tk.Label(self, text="🔑 Nueva Renta",
-                 font=("Helvetica", 15, "bold"),
+        tk.Label(self, text="🔑 New Rental",
+                 font=("Segoe UI", 15, "bold"),
                  bg="#1a1a2e", fg="white",
                  padx=16, pady=10).pack(fill="x")
 
-        body = tk.Frame(self, bg="#f0f2f5", padx=24, pady=16)
+        body = tk.Frame(self, bg="#eef1f6", padx=20, pady=15)
         body.pack()
 
-        # ── Row helper ────────────────────────────────────────────────────────
         def row(label, widget, r):
-            tk.Label(body, text=label, bg="#f0f2f5",
-                     font=("Helvetica", 10), anchor="w",
-                     width=22).grid(row=r, column=0, sticky="w", pady=5)
-            widget.grid(row=r, column=1, sticky="w", pady=5, padx=4)
+            tk.Label(body, text=label, bg="#eef1f6",
+                     font=("Segoe UI", 10),
+                     width=20, anchor="w").grid(row=r, column=0, pady=6)
+            widget.grid(row=r, column=1, pady=6)
 
         # Customer
         self.customer_var = tk.StringVar()
         names = [f"{c['id']} — {c['full_name']}" for c in self.customers]
+
         self.customer_cb = ttk.Combobox(body, values=names,
                                         textvariable=self.customer_var,
                                         state="readonly", width=30)
-        row("Cliente *", self.customer_cb, 0)
-        self.customer_cb.bind("<<ComboboxSelected>>", self._on_field_change)
+        row("Customer *", self.customer_cb, 0)
 
         # Vehicle
         self.vehicle_var = tk.StringVar()
-        vnames = [f"{v['id']} — {v['brand']} {v['model']}  (${v['rate_per_day']:.2f}/día)"
+        vnames = [f"{v['id']} — {v['brand']} {v['model']} (${v['rate_per_day']:.2f}/day)"
                   for v in self.vehicles]
+
         self.vehicle_cb = ttk.Combobox(body, values=vnames,
                                        textvariable=self.vehicle_var,
                                        state="readonly", width=30)
-        row("Vehículo *", self.vehicle_cb, 1)
-        self.vehicle_cb.bind("<<ComboboxSelected>>", self._on_field_change)
+        row("Vehicle *", self.vehicle_cb, 1)
 
         # Dates
         today = date.today().isoformat()
-        self.start_picker = DatePickerButton(body, initial_date=today,
-                                             on_change=self._on_date_change)
-        row("Fecha de Inicio *", self.start_picker, 2)
 
-        self.end_picker = DatePickerButton(body, initial_date=today,
-                                           on_change=self._on_date_change)
-        row("Fecha de Fin *", self.end_picker, 3)
+        self.start_picker = DatePickerButton(body, initial_date=today)
+        row("Start Date *", self.start_picker, 2)
 
-        # ── Divider ───────────────────────────────────────────────────────────
-        ttk.Separator(body, orient="horizontal").grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=10)
+        self.end_picker = DatePickerButton(body, initial_date=today)
+        row("End Date *", self.end_picker, 3)
 
-        # ── Cost breakdown panel ──────────────────────────────────────────────
-        cost_panel = tk.Frame(body, bg="#eaf4ff", relief="solid", bd=1,
-                              padx=12, pady=10)
-        cost_panel.grid(row=5, column=0, columnspan=2, sticky="ew", pady=4)
+        # Cost panel
+        cost_panel = tk.Frame(body, bg="white", bd=1, relief="solid", padx=10, pady=10)
+        cost_panel.grid(row=4, column=0, columnspan=2, pady=10)
 
-        tk.Label(cost_panel, text="Desglose del Costo",
-                 font=("Helvetica", 10, "bold"),
-                 bg="#eaf4ff", fg="#1a1a2e").pack(anchor="w")
+        self.total_label = tk.Label(cost_panel,
+                                   font=("Segoe UI", 14, "bold"),
+                                   fg="#2e7d32",
+                                   bg="white")
+        self.total_label.pack()
 
-        self.cost_detail = tk.Label(cost_panel, text="— Selecciona vehículo y fechas —",
-                                    font=("Helvetica", 10), bg="#eaf4ff", fg="#555555")
-        self.cost_detail.pack(anchor="w", pady=2)
+        # Buttons
+        btns = tk.Frame(body, bg="#eef1f6")
+        btns.grid(row=5, column=0, columnspan=2, pady=10)
 
-        self.total_label = tk.Label(cost_panel, text="",
-                                    font=("Helvetica", 13, "bold"),
-                                    bg="#eaf4ff", fg="#27ae60")
-        self.total_label.pack(anchor="w")
+        ttk.Button(btns, text="Calculate",
+                   command=self._calculate).pack(side="left", padx=6)
 
-        self.conversion_label = tk.Label(cost_panel, text="",
-                                         font=("Helvetica", 9, "italic"),
-                                         bg="#eaf4ff", fg="#8e44ad")
-        self.conversion_label.pack(anchor="w")
-
-        # ── Buttons ───────────────────────────────────────────────────────────
-        btn_row = tk.Frame(body, bg="#f0f2f5")
-        btn_row.grid(row=6, column=0, columnspan=2, pady=14)
-
-        self.calc_btn = tk.Button(
-            btn_row, text="🧮 Calcular Costo",
-            font=("Helvetica", 10, "bold"),
-            bg="#e67e22", fg="white", relief="flat",
-            padx=14, pady=7, cursor="hand2",
-            command=self._calculate
-        )
-        self.calc_btn.pack(side="left", padx=6)
-
-        self.confirm_btn = tk.Button(
-            btn_row, text="✅ Confirmar Renta",
-            font=("Helvetica", 10, "bold"),
-            bg="#27ae60", fg="white", relief="flat",
-            padx=14, pady=7, cursor="hand2",
-            state="disabled",
-            command=self._confirm
-        )
-        self.confirm_btn.pack(side="left", padx=6)
-
-        tk.Button(btn_row, text="Cancelar",
-                  font=("Helvetica", 10),
-                  bg="#aaaaaa", fg="white", relief="flat",
-                  padx=10, pady=7, cursor="hand2",
-                  command=self.destroy).pack(side="left", padx=6)
-
-    # ── Callbacks ─────────────────────────────────────────────────────────────
-
-    def _on_field_change(self, event=None):
-        """Reset cost state when any field changes."""
-        self._reset_cost()
-
-    def _on_date_change(self, date_str):
-        """Called by DatePickerButton on_change."""
-        self._reset_cost()
-
-    def _reset_cost(self):
-        self._cost_calculated = False
-        self.confirm_btn.config(state="disabled")
-        self.cost_detail.config(text="— Selecciona vehículo y fechas —", fg="#555555")
-        self.total_label.config(text="")
-        self.conversion_label.config(text="")
+        ttk.Button(btns, text="Confirm",
+                   command=self._confirm).pack(side="left", padx=6)
 
     def _get_vehicle_id(self):
         txt = self.vehicle_var.get()
         if not txt:
-            return None, None
-        vid = int(txt.split("—")[0].strip())
-        v = get_vehicle_by_id(vid)
-        return vid, v
+            return None
+        return int(txt.split("—")[0].strip())
 
     def _calculate(self):
-        """Validate inputs, calculate cost, show breakdown, enable Confirm."""
-        if not self.customer_var.get():
-            messagebox.showerror("Validación", "Selecciona un cliente.", parent=self)
-            return
-        vid, vehicle = self._get_vehicle_id()
+        vid = self._get_vehicle_id()
         if not vid:
-            messagebox.showerror("Validación", "Selecciona un vehículo.", parent=self)
             return
 
         start = self.start_picker.get()
-        end   = self.end_picker.get()
+        end = self.end_picker.get()
 
-        ok, days, total, msg = calculate_rental_cost(vid, start, end)
-        if not ok:
-            self.cost_detail.config(text=f"⚠ {msg}", fg="#e74c3c")
-            self.total_label.config(text="")
-            return
+        ok, days, total, _ = calculate_rental_cost(vid, start, end)
 
-        # Check for matching reservation to preview conversion
-        from database.rental_queries import check_vehicle_conflict
-        from database.db import get_connection
-        conn = get_connection()
-        res_row = conn.execute("""
-            SELECT id, customer_id FROM reservations
-            WHERE vehicle_id = ?
-              AND status = 'pending'
-              AND NOT (end_date < ? OR start_date > ?)
-            LIMIT 1
-        """, (vid, start, end)).fetchone()
-        conn.close()
-
-        self._cost_calculated = True
-        self._days  = days
-        self._total = total
-
-        self.cost_detail.config(
-            text=f"{days} día(s)  ×  ${vehicle['rate_per_day']:.2f} / día",
-            fg="#333333"
-        )
-        self.total_label.config(text=f"Total:  ${total:.2f}")
-
-        if res_row:
-            self.conversion_label.config(
-                text=f"⚡ Se convertirá automáticamente la Reserva #{res_row['id']}"
-            )
-        else:
-            self.conversion_label.config(text="")
-
-        self.confirm_btn.config(state="normal")
+        if ok:
+            self.total_label.config(text=f"Total: ${total:.2f}")
+            self._cost_calculated = True
 
     def _confirm(self):
         if not self._cost_calculated:
             return
 
-        vid, vehicle = self._get_vehicle_id()
-        customer_id  = int(self.customer_var.get().split("—")[0].strip())
-        start = self.start_picker.get()
-        end   = self.end_picker.get()
+        vid = self._get_vehicle_id()
+        customer_id = int(self.customer_var.get().split("—")[0].strip())
 
-        ok, msg, converted = start_rental(
+        start = self.start_picker.get()
+        end = self.end_picker.get()
+
+        vehicle = get_vehicle_by_id(vid)
+
+        ok, msg, _ = start_rental(
             customer_id, vid, start, end, vehicle["rate_per_day"]
         )
 
         if ok:
-            messagebox.showinfo("Éxito", msg, parent=self)
+            messagebox.showinfo("Success", msg)
             self.on_save()
             self.destroy()
         else:
-            messagebox.showerror("Error", msg, parent=self)
+            messagebox.showerror("Error", msg)
