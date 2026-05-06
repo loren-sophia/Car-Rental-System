@@ -5,51 +5,110 @@ from database.report_queries import get_vehicles_by_status, get_rentals_by_month
 
 class ReportsView(tk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, bg="#f0f2f5")
+        super().__init__(parent, bg="#eef1f6")
+        self.style = ttk.Style()
+        self.configure_styles()
         self.build()
 
+    def configure_styles(self):
+        # Tema base
+        self.style.theme_use("clam")
+
+        # Notebook
+        self.style.configure("TNotebook", background="#eef1f6", borderwidth=0)
+        self.style.configure("TNotebook.Tab",
+                             font=("Segoe UI", 10, "bold"),
+                             padding=[12, 6])
+
+        # Treeview (tabla)
+        self.style.configure("Treeview",
+                             font=("Segoe UI", 10),
+                             rowheight=28,
+                             background="white",
+                             fieldbackground="white",
+                             bordercolor="#d9d9d9")
+
+        self.style.configure("Treeview.Heading",
+                             font=("Segoe UI", 10, "bold"),
+                             background="#4a90d9",
+                             foreground="white")
+
+        # Botón moderno
+        self.style.configure("Primary.TButton",
+                             font=("Segoe UI", 10, "bold"),
+                             foreground="white",
+                             background="#4a90d9",
+                             padding=6)
+
     def build(self):
-        tk.Label(self, text="📊 Reports", font=("Helvetica", 18, "bold"),
-                 bg="#f0f2f5", fg="#1a1a2e").pack(pady=(16, 6))
+        # Header
+        header = tk.Frame(self, bg="#eef1f6")
+        header.pack(fill="x", pady=(15, 5), padx=20)
 
-        tk.Button(self, text="⟳ Refresh", command=self.refresh,
-                  bg="#4a90d9", fg="white", font=("Helvetica", 10),
-                  relief="flat", padx=10, pady=4, cursor="hand2").pack(pady=(0, 10))
+        tk.Label(header, text="📊 Reports Dashboard",
+                 font=("Segoe UI", 20, "bold"),
+                 bg="#eef1f6", fg="#1a1a2e").pack(side="left")
 
-        # Notebook for sub-reports
+        ttk.Button(header, text="⟳ Refresh",
+                   style="Primary.TButton",
+                   command=self.refresh).pack(side="right")
+
+        # Notebook
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill="both", expand=True, padx=20, pady=6)
+        self.notebook.pack(fill="both", expand=True, padx=20, pady=10)
 
-        self.tab_status = tk.Frame(self.notebook, bg="#f0f2f5")
-        self.tab_monthly = tk.Frame(self.notebook, bg="#f0f2f5")
-        self.tab_customers = tk.Frame(self.notebook, bg="#f0f2f5")
+        self.tab_status = tk.Frame(self.notebook, bg="#eef1f6")
+        self.tab_monthly = tk.Frame(self.notebook, bg="#eef1f6")
+        self.tab_customers = tk.Frame(self.notebook, bg="#eef1f6")
 
-        self.notebook.add(self.tab_status, text="Vehicles by Status")
-        self.notebook.add(self.tab_monthly, text="Rentals by Month")
+        self.notebook.add(self.tab_status, text="Fleet Status")
+        self.notebook.add(self.tab_monthly, text="Monthly Revenue")
         self.notebook.add(self.tab_customers, text="Top Customers")
 
         self.refresh()
+
+    def create_card(self, parent):
+        """Contenedor tipo tarjeta"""
+        frame = tk.Frame(parent, bg="white", bd=0, highlightthickness=1,
+                         highlightbackground="#dcdcdc")
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+        return frame
+
+    def create_table(self, parent, columns):
+        tree = ttk.Treeview(parent, columns=columns, show="headings")
+
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, anchor="center", width=150)
+
+        tree.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
+        tree.configure(yscroll=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+
+        return tree
 
     def refresh(self):
         self._build_status_tab()
         self._build_monthly_tab()
         self._build_customers_tab()
 
-    # ── Tab 1: Vehicles by Status ─────────────────────────────────────────────
+    # ── Tab 1 ─────────────────────────────────────────────
 
     def _build_status_tab(self):
         for w in self.tab_status.winfo_children():
             w.destroy()
 
-        tk.Label(self.tab_status, text="Fleet Status Summary",
-                 font=("Helvetica", 13, "bold"), bg="#f0f2f5").pack(pady=10)
+        card = self.create_card(self.tab_status)
+
+        tk.Label(card, text="Fleet Status Overview",
+                 font=("Segoe UI", 14, "bold"),
+                 bg="white").pack(anchor="w", padx=10, pady=(10, 0))
 
         cols = ("Status", "Count")
-        tree = ttk.Treeview(self.tab_status, columns=cols, show="headings", height=8)
-        for col in cols:
-            tree.heading(col, text=col)
-            tree.column(col, width=200, anchor="center")
-        tree.pack(padx=20, pady=6)
+        tree = self.create_table(card, cols)
 
         STATUS_COLORS = {
             "available": "#27ae60",
@@ -57,26 +116,28 @@ class ReportsView(tk.Frame):
             "reserved": "#8e44ad",
             "maintenance": "#e74c3c",
         }
+
         for row in get_vehicles_by_status():
             tag = row["status"]
-            tree.insert("", "end", values=(row["status"].capitalize(), row["count"]), tags=(tag,))
-            tree.tag_configure(tag, foreground=STATUS_COLORS.get(row["status"], "#333"))
+            tree.insert("", "end",
+                        values=(row["status"].capitalize(), row["count"]),
+                        tags=(tag,))
+            tree.tag_configure(tag, foreground=STATUS_COLORS.get(tag, "#333"))
 
-    # ── Tab 2: Rentals by Month ───────────────────────────────────────────────
+    # ── Tab 2 ─────────────────────────────────────────────
 
     def _build_monthly_tab(self):
         for w in self.tab_monthly.winfo_children():
             w.destroy()
 
-        tk.Label(self.tab_monthly, text="Rental Revenue by Month",
-                 font=("Helvetica", 13, "bold"), bg="#f0f2f5").pack(pady=10)
+        card = self.create_card(self.tab_monthly)
+
+        tk.Label(card, text="Monthly Revenue Report",
+                 font=("Segoe UI", 14, "bold"),
+                 bg="white").pack(anchor="w", padx=10, pady=(10, 0))
 
         cols = ("Month", "Total Rentals", "Revenue")
-        tree = ttk.Treeview(self.tab_monthly, columns=cols, show="headings", height=12)
-        for col in cols:
-            tree.heading(col, text=col)
-            tree.column(col, width=180, anchor="center")
-        tree.pack(padx=20, pady=6)
+        tree = self.create_table(card, cols)
 
         for row in get_rentals_by_month():
             tree.insert("", "end", values=(
@@ -85,21 +146,20 @@ class ReportsView(tk.Frame):
                 f"${row['revenue']:,.2f}"
             ))
 
-    # ── Tab 3: Top Customers ──────────────────────────────────────────────────
+    # ── Tab 3 ─────────────────────────────────────────────
 
     def _build_customers_tab(self):
         for w in self.tab_customers.winfo_children():
             w.destroy()
 
-        tk.Label(self.tab_customers, text="Top Customers by Rentals",
-                 font=("Helvetica", 13, "bold"), bg="#f0f2f5").pack(pady=10)
+        card = self.create_card(self.tab_customers)
+
+        tk.Label(card, text="Top Customers",
+                 font=("Segoe UI", 14, "bold"),
+                 bg="white").pack(anchor="w", padx=10, pady=(10, 0))
 
         cols = ("Customer", "Total Rentals", "Total Spent")
-        tree = ttk.Treeview(self.tab_customers, columns=cols, show="headings", height=12)
-        for col in cols:
-            tree.heading(col, text=col)
-            tree.column(col, width=180, anchor="center")
-        tree.pack(padx=20, pady=6)
+        tree = self.create_table(card, cols)
 
         for row in get_top_customers():
             tree.insert("", "end", values=(
