@@ -121,17 +121,15 @@ class RentalsView(tk.Frame):
 
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
 
-        # ── Buttons ─────────────────────────────
-        btn_frame = tk.Frame(self, bg="#eef1f6")
-        btn_frame.pack(pady=10)
-
-        ttk.Button(btn_frame, text="➕ New Rental",
-                   style="Primary.TButton",
-                   command=self.open_form).pack(side="left", padx=6)
-
-        ttk.Button(btn_frame, text="✔ Complete Rental",
-                   style="Primary.TButton",
-                   command=self.complete).pack(side="left", padx=6)
+      # Action buttons
+        btn_frame = tk.Frame(self, bg="#f0f2f5")
+        btn_frame.pack(pady=6)
+        tk.Button(btn_frame, text="➕ Nueva Renta", command=self.open_form,
+                  bg="#27ae60", fg="white", font=("Helvetica", 10),
+                  relief="flat", padx=12, pady=6, cursor="hand2").pack(side="left", padx=6)
+        tk.Button(btn_frame, text="✅ Completar Renta", command=self.complete,
+                  bg="#2980b9", fg="white", font=("Helvetica", 10),
+                  relief="flat", padx=12, pady=6, cursor="hand2").pack(side="left", padx=6)
 
         self.load_rentals()
 
