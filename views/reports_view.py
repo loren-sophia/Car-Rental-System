@@ -1,109 +1,133 @@
-import tkinter as tk
-from tkinter import ttk
+import flet as ft
 from database.report_queries import get_vehicles_by_status, get_rentals_by_month, get_top_customers
+from utils.theme import (
+    BG, PRIMARY, SUCCESS, TEXT_LIGHT, TEXT_DARK, TEXT_GREY, TEXT_MUTED,
+    CARD_BG, HEADER_BG, BORDER_COL, STATUS_COLORS,
+    section_title, primary_btn, tbl_header
+)
 
 
-class ReportsView(tk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent, bg="#f0f2f5")
-        self.build()
+def reports_view(page: ft.Page) -> ft.Container:
+    tab_content = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO)
 
-    def build(self):
-        tk.Label(self, text="📊 Reports", font=("Helvetica", 18, "bold"),
-                 bg="#f0f2f5", fg="#1a1a2e").pack(pady=(16, 6))
+    def tbl_row(cells, widths, i=0):
+        return ft.Container(
+            content=ft.Row([
+                ft.Text(str(v), width=w, size=12, color=TEXT_GREY)
+                for v, w in zip(cells, widths)
+            ]),
+            bgcolor=CARD_BG if i % 2 == 0 else HEADER_BG,
+            border_radius=6,
+            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+        )
 
-        tk.Button(self, text="⟳ Refresh", command=self.refresh,
-                  bg="#4a90d9", fg="white", font=("Helvetica", 10),
-                  relief="flat", padx=10, pady=4, cursor="hand2").pack(pady=(0, 10))
+    def show_status(e=None):
+        rows = get_vehicles_by_status()
+        tab_content.controls = [
+            ft.Text("Resumen de Flota por Estado", size=15, weight="bold", color=TEXT_DARK),
+            tbl_header(["Estado", "Cantidad"], [200, 200]),
+            ft.Container(
+                content=ft.Column([
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Container(
+                                content=ft.Text(r["status"].capitalize(), size=12,
+                                                color=TEXT_LIGHT, weight="bold"),
+                                bgcolor=STATUS_COLORS.get(r["status"], "#546e7a"),
+                                border_radius=20, width=200,
+                                padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                            ),
+                            ft.Text(str(r["count"]), width=200, size=16,
+                                    weight="bold", color=TEXT_DARK),
+                        ]),
+                        bgcolor=CARD_BG, border_radius=6,
+                        padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                    )
+                    for r in rows
+                ], spacing=2),
+                bgcolor=CARD_BG,
+                border=ft.border.all(1, BORDER_COL),
+                border_radius=ft.border_radius.only(bottom_left=8, bottom_right=8),
+            ),
+        ]
+        page.update()
 
-        # Notebook for sub-reports
-        self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill="both", expand=True, padx=20, pady=6)
+    def show_monthly(e=None):
+        cols = ["Mes", "Total Rentas", "Ingresos"]; widths = [160, 160, 160]
+        rows = get_rentals_by_month()
+        tab_content.controls = [
+            ft.Text("Ingresos por Mes", size=15, weight="bold", color=TEXT_DARK),
+            tbl_header(cols, widths),
+            ft.Container(
+                content=ft.Column([
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Text(r["month"],             width=widths[0], size=12, color=TEXT_GREY),
+                            ft.Text(str(r["total_rentals"]),width=widths[1], size=12, color=TEXT_GREY),
+                            ft.Text(f"${r['revenue']:,.2f}",width=widths[2], size=12,
+                                    color=SUCCESS, weight="bold"),
+                        ]),
+                        bgcolor=CARD_BG if i % 2 == 0 else HEADER_BG,
+                        border_radius=6,
+                        padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                    )
+                    for i, r in enumerate(rows)
+                ], spacing=2),
+                bgcolor=CARD_BG,
+                border=ft.border.all(1, BORDER_COL),
+                border_radius=ft.border_radius.only(bottom_left=8, bottom_right=8),
+            ),
+        ]
+        page.update()
 
-        self.tab_status = tk.Frame(self.notebook, bg="#f0f2f5")
-        self.tab_monthly = tk.Frame(self.notebook, bg="#f0f2f5")
-        self.tab_customers = tk.Frame(self.notebook, bg="#f0f2f5")
+    def show_customers(e=None):
+        cols = ["Cliente", "Rentas", "Total Gastado"]; widths = [240, 120, 180]
+        rows = get_top_customers()
+        tab_content.controls = [
+            ft.Text("Top Clientes por Rentas", size=15, weight="bold", color=TEXT_DARK),
+            tbl_header(cols, widths),
+            ft.Container(
+                content=ft.Column([
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Text(r["full_name"],              width=widths[0], size=12, color=TEXT_DARK, weight="bold"),
+                            ft.Text(str(r["total_rentals"]),     width=widths[1], size=12, color=TEXT_GREY),
+                            ft.Text(f"${r['total_spent']:,.2f}", width=widths[2], size=12, color=SUCCESS, weight="bold"),
+                        ]),
+                        bgcolor=CARD_BG if i % 2 == 0 else HEADER_BG,
+                        border_radius=6,
+                        padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                    )
+                    for i, r in enumerate(rows)
+                ], spacing=2),
+                bgcolor=CARD_BG,
+                border=ft.border.all(1, BORDER_COL),
+                border_radius=ft.border_radius.only(bottom_left=8, bottom_right=8),
+            ),
+        ]
+        page.update()
 
-        self.notebook.add(self.tab_status, text="Vehicles by Status")
-        self.notebook.add(self.tab_monthly, text="Rentals by Month")
-        self.notebook.add(self.tab_customers, text="Top Customers")
+    show_status()
 
-        self.refresh()
+    tabs = ft.Tabs(
+        selected_index=0,
+        animation_duration=200,
+        tabs=[
+            ft.Tab(text="Flota por Estado"),
+            ft.Tab(text="Ingresos Mensuales"),
+            ft.Tab(text="Top Clientes"),
+        ],
+        on_change=lambda e: [show_status, show_monthly, show_customers][e.control.selected_index](),
+    )
 
-    def refresh(self):
-        self._build_status_tab()
-        self._build_monthly_tab()
-        self._build_customers_tab()
-
-    # ── Tab 1: Vehicles by Status ─────────────────────────────────────────────
-
-    def _build_status_tab(self):
-        for w in self.tab_status.winfo_children():
-            w.destroy()
-
-        tk.Label(self.tab_status, text="Fleet Status Summary",
-                 font=("Helvetica", 13, "bold"), bg="#f0f2f5").pack(pady=10)
-
-        cols = ("Status", "Count")
-        tree = ttk.Treeview(self.tab_status, columns=cols, show="headings", height=8)
-        for col in cols:
-            tree.heading(col, text=col)
-            tree.column(col, width=200, anchor="center")
-        tree.pack(padx=20, pady=6)
-
-        STATUS_COLORS = {
-            "available": "#27ae60",
-            "rented": "#e67e22",
-            "reserved": "#8e44ad",
-            "maintenance": "#e74c3c",
-        }
-        for row in get_vehicles_by_status():
-            tag = row["status"]
-            tree.insert("", "end", values=(row["status"].capitalize(), row["count"]), tags=(tag,))
-            tree.tag_configure(tag, foreground=STATUS_COLORS.get(row["status"], "#333"))
-
-    # ── Tab 2: Rentals by Month ───────────────────────────────────────────────
-
-    def _build_monthly_tab(self):
-        for w in self.tab_monthly.winfo_children():
-            w.destroy()
-
-        tk.Label(self.tab_monthly, text="Rental Revenue by Month",
-                 font=("Helvetica", 13, "bold"), bg="#f0f2f5").pack(pady=10)
-
-        cols = ("Month", "Total Rentals", "Revenue")
-        tree = ttk.Treeview(self.tab_monthly, columns=cols, show="headings", height=12)
-        for col in cols:
-            tree.heading(col, text=col)
-            tree.column(col, width=180, anchor="center")
-        tree.pack(padx=20, pady=6)
-
-        for row in get_rentals_by_month():
-            tree.insert("", "end", values=(
-                row["month"],
-                row["total_rentals"],
-                f"${row['revenue']:,.2f}"
-            ))
-
-    # ── Tab 3: Top Customers ──────────────────────────────────────────────────
-
-    def _build_customers_tab(self):
-        for w in self.tab_customers.winfo_children():
-            w.destroy()
-
-        tk.Label(self.tab_customers, text="Top Customers by Rentals",
-                 font=("Helvetica", 13, "bold"), bg="#f0f2f5").pack(pady=10)
-
-        cols = ("Customer", "Total Rentals", "Total Spent")
-        tree = ttk.Treeview(self.tab_customers, columns=cols, show="headings", height=12)
-        for col in cols:
-            tree.heading(col, text=col)
-            tree.column(col, width=180, anchor="center")
-        tree.pack(padx=20, pady=6)
-
-        for row in get_top_customers():
-            tree.insert("", "end", values=(
-                row["full_name"],
-                row["total_rentals"],
-                f"${row['total_spent']:,.2f}"
-            ))
+    return ft.Container(
+        content=ft.Column([
+            ft.Row([section_title("📊 Reportes"),
+                    primary_btn("⟳ Actualizar", show_status)],
+                   alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ft.Divider(height=1, color=BORDER_COL),
+            tabs,
+            tab_content,
+        ], spacing=12, expand=True),
+        bgcolor=BG, padding=24, expand=True,
+    )

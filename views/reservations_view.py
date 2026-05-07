@@ -1,197 +1,154 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-from datetime import date
-
+import flet as ft
+from datetime import datetime
 from database.rental_queries import get_all_reservations, add_reservation, cancel_reservation
 from database.customer_queries import get_all_customers
 from database.vehicle_queries import get_available_vehicles
-from utils.date_picker import DatePickerButton
+from utils.theme import (
+    BG, PRIMARY, SUCCESS, DANGER,
+    CARD_BG, CARD_SEL, HEADER_BG, BORDER_COL,
+    TEXT_DARK, TEXT_LIGHT, TEXT_GREY, TEXT_MUTED,
+    RES_LABELS, mk_field, mk_dropdown,
+    section_title, primary_btn, danger_btn,
+    tbl_header, status_chip, info_banner, snack
+)
+from utils.modal import show_modal
 
-COLUMNS = ("ID", "Cliente", "Vehículo", "Inicio", "Fin", "Estado")
-STATUSES = ["All", "pending", "converted", "completed", "cancelled"]
-STATUS_LABELS = {
-    "All": "Todos", "pending": "Pendiente", "converted": "Convertida",
-    "active": "Activa", "completed": "Completada", "cancelled": "Cancelada"
-}
-STATUS_COLORS = {
-    "pending": "#8e44ad", "converted": "#2980b9",
-    "active": "#27ae60", "completed": "#aaaaaa", "cancelled": "#e74c3c"
-}
+RES_FILTER = ["Todos", "pending", "converted", "completed", "cancelled"]
+COLS   = ["ID", "Cliente",   "Vehículo",   "Inicio",  "Fin",    "Estado"]
+WIDTHS = [45,   180,          180,           110,       110,      130]
 
 
-class ReservationsView(tk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent, bg="#f0f2f5")
-        self.selected_id = None
-        self.build()
+def _valid_date(s):
+    try: datetime.strptime(s, "%Y-%m-%d"); return True
+    except: return False
 
-    def build(self):
-        tk.Label(self, text="📅 Reservaciones", font=("Helvetica", 18, "bold"),
-                 bg="#f0f2f5", fg="#1a1a2e").pack(pady=(16, 6))
 
-        # Filter
-        filter_frame = tk.Frame(self, bg="#f0f2f5")
-        filter_frame.pack(fill="x", padx=20, pady=4)
-        tk.Label(filter_frame, text="Estado:", bg="#f0f2f5").pack(side="left")
-        self.filter_status = ttk.Combobox(
-            filter_frame,
-            values=[STATUS_LABELS.get(s, s) for s in STATUSES],
-            state="readonly", width=14
+def reservations_view(page: ft.Page) -> ft.Container:
+    selected  = {"data": None}
+    filter_dd = mk_dropdown("Estado",
+                            [ft.dropdown.Option(s, RES_LABELS.get(s, s.capitalize())) for s in RES_FILTER],
+                            "Todos", width=180)
+    table_body = ft.Column(spacing=1, scroll=ft.ScrollMode.AUTO, expand=True)
+
+    def make_row(r):
+        is_sel = selected["data"] and selected["data"]["id"] == r["id"]
+        def on_click(e): selected["data"] = r; load()
+        return ft.Container(
+            content=ft.Row([
+                ft.Text(str(r["id"]),       width=WIDTHS[0], size=12, color=TEXT_GREY),
+                ft.Text(r["customer_name"], width=WIDTHS[1], size=12, color=TEXT_DARK, weight="bold"),
+                ft.Text(r["vehicle"],       width=WIDTHS[2], size=12, color=TEXT_GREY),
+                ft.Text(r["start_date"],    width=WIDTHS[3], size=12, color=TEXT_MUTED),
+                ft.Text(r["end_date"],      width=WIDTHS[4], size=12, color=TEXT_MUTED),
+                status_chip(r["status"], RES_LABELS.get(r["status"], r["status"]), WIDTHS[5]),
+            ]),
+            bgcolor=CARD_SEL if is_sel else CARD_BG,
+            border_radius=6,
+            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            on_click=on_click, ink=True,
+            border=ft.border.all(1, PRIMARY if is_sel else BORDER_COL),
         )
-        self.filter_status.set("Todos")
-        self.filter_status.pack(side="left", padx=6)
-        tk.Button(filter_frame, text="Filtrar", command=self.load_reservations,
-                  bg="#4a90d9", fg="white", relief="flat", padx=8).pack(side="left")
 
-        # Treeview
-        tree_frame = tk.Frame(self)
-        tree_frame.pack(fill="both", expand=True, padx=20, pady=6)
+    def load(e=None):
+        key = filter_dd.value or "Todos"
+        filters = None if key == "Todos" else {"status": key}
+        table_body.controls = [make_row(r) for r in get_all_reservations(filters)]
+        page.update()
 
-        self.tree = ttk.Treeview(tree_frame, columns=COLUMNS, show="headings", height=14)
-        for col in COLUMNS:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=120, anchor="center")
-        self.tree.column("ID", width=40)
-        self.tree.column("Cliente", width=160)
-        self.tree.column("Vehículo", width=160)
+    def open_form(e=None):
+        customers = get_all_customers()
+        vehicles  = get_available_vehicles()
+        if not customers:
+            snack(page, "No hay clientes. Agrega uno primero.", error=True); return
+        if not vehicles:
+            snack(page, "No hay vehículos disponibles.", error=True); return
 
-        sb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=sb.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
+        f_cust  = mk_dropdown("Cliente *",
+                              [ft.dropdown.Option(str(c["id"]), f"{c['id']} — {c['full_name']}") for c in customers],
+                              width=420)
+        f_veh   = mk_dropdown("Vehículo *",
+                              [ft.dropdown.Option(str(v["id"]), f"{v['id']} — {v['brand']} {v['model']} (${v['rate_per_day']:.2f}/día)") for v in vehicles],
+                              width=420)
+        f_start = mk_field("Fecha Inicio (YYYY-MM-DD) *", width=200)
+        f_end   = mk_field("Fecha Fin   (YYYY-MM-DD) *", width=200)
+        err     = ft.Text("", color=DANGER, size=13)
+        close_fn = {"fn": None}
 
-        # Buttons
-        btn_frame = tk.Frame(self, bg="#f0f2f5")
-        btn_frame.pack(pady=6)
-        tk.Button(btn_frame, text="➕ Nueva Reserva", command=self.open_form,
-                  bg="#27ae60", fg="white", font=("Helvetica", 10),
-                  relief="flat", padx=12, pady=6, cursor="hand2").pack(side="left", padx=6)
-        tk.Button(btn_frame, text="❌ Cancelar Reserva", command=self.cancel,
-                  bg="#e74c3c", fg="white", font=("Helvetica", 10),
-                  relief="flat", padx=12, pady=6, cursor="hand2").pack(side="left", padx=6)
+        def save(e):
+            if not f_cust.value:
+                err.value = "⚠ Selecciona un cliente."; page.update(); return
+            if not f_veh.value:
+                err.value = "⚠ Selecciona un vehículo."; page.update(); return
+            start = (f_start.value or "").strip()
+            end   = (f_end.value   or "").strip()
+            if not start or not _valid_date(start):
+                err.value = "⚠ Fecha inicio inválida. Formato: YYYY-MM-DD"; page.update(); return
+            if not end or not _valid_date(end):
+                err.value = "⚠ Fecha fin inválida. Formato: YYYY-MM-DD"; page.update(); return
+            if end <= start:
+                err.value = "⚠ La fecha fin debe ser posterior al inicio."; page.update(); return
 
-        self.load_reservations()
-
-    def load_reservations(self):
-        self.tree.delete(*self.tree.get_children())
-        reverse = {v: k for k, v in STATUS_LABELS.items()}
-        key = reverse.get(self.filter_status.get(), "All")
-        filters = {} if key == "All" else {"status": key}
-        for r in get_all_reservations(filters or None):
-            tag = r["status"]
-            self.tree.insert("", "end", values=(
-                r["id"], r["customer_name"], r["vehicle"],
-                r["start_date"], r["end_date"], r["status"]
-            ), tags=(tag,))
-        for status, color in STATUS_COLORS.items():
-            self.tree.tag_configure(status, foreground=color)
-        self.selected_id = None
-
-    def on_select(self, event):
-        sel = self.tree.selection()
-        if sel:
-            self.selected_id = self.tree.item(sel[0])["values"][0]
-
-    def cancel(self):
-        if not self.selected_id:
-            messagebox.showwarning("Sin selección", "Selecciona una reserva primero.")
-            return
-        if messagebox.askyesno("Confirmar", "¿Cancelar esta reserva?"):
-            ok, msg = cancel_reservation(self.selected_id)
+            ok, msg = add_reservation(int(f_cust.value), int(f_veh.value), start, end)
             if ok:
-                messagebox.showinfo("Éxito", msg)
-                self.load_reservations()
+                if close_fn["fn"]: close_fn["fn"]()
+                snack(page, msg); load()
             else:
-                messagebox.showerror("Error", msg)
+                err.value = f"⚠ {msg}"; page.update()
 
-    def open_form(self):
-        ReservationForm(self, on_save=self.load_reservations)
+        content = ft.Column([
+            f_cust, f_veh,
+            ft.Row([f_start, f_end], spacing=12),
+            info_banner("ℹ️ Al crear una renta con este vehículo y fechas,\nla reserva se convertirá automáticamente."),
+            err,
+        ], spacing=14, tight=True)
 
+        actions = [
+            ft.ElevatedButton("💾 Guardar", on_click=save, bgcolor=SUCCESS, color=TEXT_LIGHT),
+            ft.ElevatedButton("Cancelar",
+                              on_click=lambda e: close_fn["fn"]() if close_fn["fn"] else None,
+                              bgcolor=HEADER_BG, color=TEXT_MUTED),
+        ]
+        close_fn["fn"] = show_modal(page, "📅 Nueva Reservación", content, actions, width=480)
 
-class ReservationForm(tk.Toplevel):
-    def __init__(self, parent, on_save):
-        super().__init__(parent)
-        self.title("Nueva Reservación")
-        self.resizable(False, False)
-        self.configure(bg="#f0f2f5")
-        self.on_save = on_save
-        self.customers = get_all_customers()
-        self.vehicles  = get_available_vehicles()
-        self._build()
-        self.grab_set()
+    def cancel_res(e):
+        if not selected["data"]:
+            snack(page, "Selecciona una reserva primero.", error=True); return
+        r = selected["data"]
+        if r["status"] != "pending":
+            snack(page, f"Solo puedes cancelar reservas Pendientes. Esta está: {RES_LABELS.get(r['status'], r['status'])}.", error=True); return
 
-    def _build(self):
-        tk.Label(self, text="📅 Nueva Reservación",
-                 font=("Helvetica", 15, "bold"),
-                 bg="#1a1a2e", fg="white",
-                 padx=16, pady=10).pack(fill="x")
+        close_fn = {"fn": None}
+        def do_cancel(e):
+            ok, msg = cancel_reservation(r["id"])
+            if close_fn["fn"]: close_fn["fn"]()
+            snack(page, msg, error=not ok)
+            if ok: selected["data"] = None; load()
 
-        body = tk.Frame(self, bg="#f0f2f5", padx=24, pady=16)
-        body.pack()
+        content = ft.Text(f"¿Cancelar reserva #{r['id']} de {r['customer_name']}?",
+                          color=TEXT_GREY, size=14)
+        actions = [
+            ft.ElevatedButton("❌ Cancelar Reserva", on_click=do_cancel, bgcolor=DANGER, color=TEXT_LIGHT),
+            ft.ElevatedButton("Volver",
+                              on_click=lambda e: close_fn["fn"]() if close_fn["fn"] else None,
+                              bgcolor=HEADER_BG, color=TEXT_MUTED),
+        ]
+        close_fn["fn"] = show_modal(page, "⚠️ Confirmar Cancelación", content, actions, width=380)
 
-        def row(label, widget, r):
-            tk.Label(body, text=label, bg="#f0f2f5",
-                     font=("Helvetica", 10), anchor="w",
-                     width=22).grid(row=r, column=0, sticky="w", pady=5)
-            widget.grid(row=r, column=1, sticky="w", pady=5, padx=4)
+    load()
 
-        # Customer
-        self.customer_var = tk.StringVar()
-        names = [f"{c['id']} — {c['full_name']}" for c in self.customers]
-        self.customer_cb = ttk.Combobox(body, values=names,
-                                        textvariable=self.customer_var,
-                                        state="readonly", width=30)
-        row("Cliente *", self.customer_cb, 0)
-
-        # Vehicle
-        self.vehicle_var = tk.StringVar()
-        vnames = [f"{v['id']} — {v['brand']} {v['model']}  (${v['rate_per_day']:.2f}/día)"
-                  for v in self.vehicles]
-        self.vehicle_cb = ttk.Combobox(body, values=vnames,
-                                       textvariable=self.vehicle_var,
-                                       state="readonly", width=30)
-        row("Vehículo *", self.vehicle_cb, 1)
-
-        # Date pickers
-        today = date.today().isoformat()
-        self.start_picker = DatePickerButton(body, initial_date=today)
-        row("Fecha de Inicio *", self.start_picker, 2)
-
-        self.end_picker = DatePickerButton(body, initial_date=today)
-        row("Fecha de Fin *", self.end_picker, 3)
-
-        # Info note
-        note = tk.Label(body,
-                        text="ℹ Al crear una renta, esta reserva\n   se convertirá automáticamente.",
-                        font=("Helvetica", 9, "italic"),
-                        bg="#fff8e1", fg="#7d6608",
-                        relief="solid", bd=1, padx=8, pady=6)
-        note.grid(row=4, column=0, columnspan=2, sticky="ew", pady=8)
-
-        # Save button
-        tk.Button(body, text="💾 Guardar Reserva", command=self._save,
-                  bg="#27ae60", fg="white", font=("Helvetica", 10, "bold"),
-                  relief="flat", padx=14, pady=7,
-                  cursor="hand2").grid(row=5, column=0, columnspan=2, pady=10)
-
-    def _save(self):
-        if not self.customer_var.get() or not self.vehicle_var.get():
-            messagebox.showerror("Validación", "Selecciona cliente y vehículo.", parent=self)
-            return
-        start = self.start_picker.get()
-        end   = self.end_picker.get()
-        if end <= start:
-            messagebox.showerror("Validación",
-                                 "La fecha de fin debe ser posterior al inicio.",
-                                 parent=self)
-            return
-        customer_id = int(self.customer_var.get().split("—")[0].strip())
-        vehicle_id  = int(self.vehicle_var.get().split("—")[0].strip())
-        ok, msg = add_reservation(customer_id, vehicle_id, start, end)
-        if ok:
-            messagebox.showinfo("Éxito", msg, parent=self)
-            self.on_save()
-            self.destroy()
-        else:
-            messagebox.showerror("Error", msg, parent=self)
+    return ft.Container(
+        content=ft.Column([
+            ft.Row([section_title("📅 Reservaciones")]),
+            ft.Divider(height=1, color=BORDER_COL),
+            ft.Row([filter_dd, primary_btn("Filtrar", load)], spacing=8),
+            ft.Row([primary_btn("➕ Nueva Reserva",   open_form,  SUCCESS),
+                    danger_btn("❌ Cancelar Reserva", cancel_res)], spacing=8),
+            tbl_header(COLS, WIDTHS),
+            ft.Container(
+                content=table_body, expand=True, bgcolor=CARD_BG,
+                border=ft.border.all(1, BORDER_COL),
+                border_radius=ft.border_radius.only(bottom_left=8, bottom_right=8),
+            ),
+        ], spacing=12, expand=True),
+        bgcolor=BG, padding=24, expand=True,
+    )

@@ -1,117 +1,115 @@
-import tkinter as tk
-from tkinter import ttk
+import flet as ft
 import sys
 import os
 
-# Make sure imports resolve from project root
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database.db import initialize_db
-from views.dashboard_view import DashboardView
-from views.vehicles_view import VehiclesView
-from views.customers_view import CustomersView
-from views.reservations_view import ReservationsView
-from views.rentals_view import RentalsView
-from views.reports_view import ReportsView
+from views.dashboard_view    import dashboard_view
+from views.vehicles_view     import vehicles_view
+from views.customers_view    import customers_view
+from views.reservations_view import reservations_view
+from views.rentals_view      import rentals_view
+from views.reports_view      import reports_view
+from utils.theme import SIDEBAR_BG, DARK_CARD, TEXT_LIGHT, TEXT_MUTED
+
+NAV_ITEMS = [
+    ("Dashboard",     "🏠", dashboard_view),
+    ("Vehículos",     "🚙", vehicles_view),
+    ("Clientes",      "👥", customers_view),
+    ("Reservaciones", "📅", reservations_view),
+    ("Rentas",        "🔑", rentals_view),
+    ("Reportes",      "📊", reports_view),
+]
 
 
-class CarRentalApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("🚗 Car Rental Management System")
-        self.geometry("1100x680")
-        self.minsize(900, 580)
-        self.configure(bg="#1a1a2e")
+def main(page: ft.Page):
+    page.title          = "Car Rental Management System"
+    page.bgcolor        = "#0f1117"
+    page.padding        = 0
+    page.window_width   = 1200
+    page.window_height  = 720
+    page.window_min_width  = 960
+    page.window_min_height = 600
 
-        initialize_db()
-        self._build_ui()
+    initialize_db()
 
-    def _build_ui(self):
-        # ── Sidebar ───────────────────────────────────────────────────────────
-        sidebar = tk.Frame(self, bg="#1a1a2e", width=190)
-        sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
+    content_area = ft.Container(expand=True, bgcolor="#f0f2f5")
 
-        # Logo area
-        tk.Label(sidebar, text="🚗", font=("Helvetica", 32), bg="#1a1a2e",
-                 fg="white").pack(pady=(24, 2))
-        tk.Label(sidebar, text="Car Rental", font=("Helvetica", 13, "bold"),
-                 bg="#1a1a2e", fg="white").pack()
-        tk.Label(sidebar, text="Management System", font=("Helvetica", 9),
-                 bg="#1a1a2e", fg="#aaaacc").pack(pady=(0, 20))
+    nav_refs = {}  # name -> (container, text_widget)
 
-        ttk.Separator(sidebar, orient="horizontal").pack(fill="x", padx=16, pady=4)
+    def show_view(name: str, builder):
+        content_area.content = builder(page)
+        for n, (c, lbl) in nav_refs.items():
+            active    = (n == name)
+            c.bgcolor = DARK_CARD if active else SIDEBAR_BG
+            lbl.color = TEXT_LIGHT if active else "#ccccee"
+            lbl.weight = ft.FontWeight.BOLD if active else ft.FontWeight.NORMAL
+        page.update()
 
-        # Nav buttons
-        self.nav_buttons = {}
-        nav_items = [
-            ("Dashboard",     "🏠"),
-            ("Vehicles",      "🚙"),
-            ("Customers",     "👥"),
-            ("Reservations",  "📅"),
-            ("Rentals",       "🔑"),
-            ("Reports",       "📊"),
-        ]
+    nav_col = ft.Column(spacing=4, tight=True)
 
-        for name, icon in nav_items:
-            btn = tk.Button(
-                sidebar, text=f"  {icon}  {name}",
-                font=("Helvetica", 11), anchor="w",
-                bg="#1a1a2e", fg="#ccccee",
-                activebackground="#16213e", activeforeground="white",
-                relief="flat", bd=0, padx=14, pady=10,
-                cursor="hand2",
-                command=lambda n=name: self.show_view(n)
-            )
-            btn.pack(fill="x", pady=1)
-            self.nav_buttons[name] = btn
+    for name, emoji, builder in NAV_ITEMS:
+        lbl = ft.Text(f"  {name}", size=13, color="#ccccee",
+                      weight=ft.FontWeight.NORMAL)
+        c = ft.Container(
+            content=ft.Row([
+                ft.Text(emoji, size=16),
+                lbl,
+            ], spacing=8, tight=True),
+            bgcolor=SIDEBAR_BG,
+            border_radius=8,
+            padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            width=192,
+            ink=True,
+            on_click=lambda e, n=name, b=builder: show_view(n, b),
+        )
+        nav_refs[name] = (c, lbl)
+        nav_col.controls.append(c)
 
-        # ── Main content area ─────────────────────────────────────────────────
-        self.content = tk.Frame(self, bg="#f0f2f5")
-        self.content.pack(side="right", fill="both", expand=True)
+    sidebar = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("🚗", size=38, text_align=ft.TextAlign.CENTER),
+                        ft.Text("Car Rental", size=14,
+                                weight=ft.FontWeight.BOLD,
+                                color=TEXT_LIGHT,
+                                text_align=ft.TextAlign.CENTER),
+                        ft.Text("Management System", size=9,
+                                color=TEXT_MUTED,
+                                text_align=ft.TextAlign.CENTER),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                       spacing=2, tight=True),
+                    padding=ft.padding.only(top=20, bottom=14),
+                ),
+                ft.Divider(height=1, color="#2a2a4e"),
+                ft.Container(height=10),
+                nav_col,
+            ],
+            spacing=0,
+            tight=True,
+        ),
+        bgcolor=SIDEBAR_BG,
+        width=210,
+        padding=ft.padding.symmetric(horizontal=6),
+    )
 
-        # Pre-load all views
-        self.views = {
-            "Dashboard":    DashboardView(self.content),
-            "Vehicles":     VehiclesView(self.content),
-            "Customers":    CustomersView(self.content),
-            "Reservations": ReservationsView(self.content),
-            "Rentals":      RentalsView(self.content),
-            "Reports":      ReportsView(self.content),
-        }
+    page.add(
+        ft.Row(
+            controls=[
+                sidebar,
+                ft.VerticalDivider(width=1, color="#2a2a4e"),
+                content_area,
+            ],
+            expand=True,
+            spacing=0,
+            vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+        )
+    )
 
-        for view in self.views.values():
-            view.place(relx=0, rely=0, relwidth=1, relheight=1)
-
-        self.show_view("Dashboard")
-
-    def show_view(self, name):
-        # Highlight active nav button
-        for btn_name, btn in self.nav_buttons.items():
-            if btn_name == name:
-                btn.config(bg="#16213e", fg="white",
-                           font=("Helvetica", 11, "bold"))
-            else:
-                btn.config(bg="#1a1a2e", fg="#ccccee",
-                           font=("Helvetica", 11))
-
-        # Raise the selected view
-        self.views[name].lift()
-
-        # Refresh on switch
-        view = self.views[name]
-        if hasattr(view, "refresh"):
-            view.refresh()
-        elif hasattr(view, "load_vehicles"):
-            view.load_vehicles()
-        elif hasattr(view, "load_customers"):
-            view.load_customers()
-        elif hasattr(view, "load_reservations"):
-            view.load_reservations()
-        elif hasattr(view, "load_rentals"):
-            view.load_rentals()
+    show_view("Dashboard", dashboard_view)
 
 
-if __name__ == "__main__":
-    app = CarRentalApp()
-    app.mainloop()
+ft.app(target=main)

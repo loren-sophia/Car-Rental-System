@@ -1,59 +1,47 @@
-import tkinter as tk
-from tkinter import ttk
+import flet as ft
 from database.report_queries import get_dashboard_stats
+from utils.theme import (
+    BG, PRIMARY, SUCCESS, WARNING, DANGER, PURPLE,
+    TEXT_DARK, TEXT_MUTED, BORDER_COL,
+    stat_card, section_title, primary_btn
+)
 
 
-class DashboardView(tk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent, bg="#f0f2f5")
-        self.build()
+def dashboard_view(page: ft.Page) -> ft.Container:
+    row1 = ft.Row(expand=False)
+    row2 = ft.Row(expand=False)
+    row3 = ft.Row(expand=False)
 
-    def build(self):
-        # Title
-        title = tk.Label(self, text="🚗  Car Rental Dashboard", font=("Helvetica", 20, "bold"),
-                         bg="#f0f2f5", fg="#1a1a2e")
-        title.pack(pady=(20, 10))
-
-        # Refresh button
-        btn = tk.Button(self, text="⟳ Refresh", command=self.refresh,
-                        bg="#4a90d9", fg="white", font=("Helvetica", 10),
-                        relief="flat", padx=10, pady=4, cursor="hand2")
-        btn.pack(pady=(0, 16))
-
-        self.cards_frame = tk.Frame(self, bg="#f0f2f5")
-        self.cards_frame.pack(fill="both", expand=True, padx=30, pady=10)
-
-        self.refresh()
-
-    def refresh(self):
-        for widget in self.cards_frame.winfo_children():
-            widget.destroy()
-
-        stats = get_dashboard_stats()
-
-        cards = [
-            ("🚙 Total Vehicles",       stats["total_vehicles"],         "#4a90d9"),
-            ("✅ Available",             stats["available_vehicles"],      "#27ae60"),
-            ("🔑 Rented",               stats["rented_vehicles"],         "#e67e22"),
-            ("📅 Reserved",             stats["reserved_vehicles"],       "#8e44ad"),
-            ("🔧 Maintenance",          stats["maintenance_vehicles"],    "#e74c3c"),
-            ("👥 Customers",            stats["total_customers"],         "#2980b9"),
-            ("📋 Active Rentals",       stats["active_rentals"],          "#16a085"),
-            ("🗓 Pending Reservations", stats["pending_reservations"],    "#d35400"),
-            ("💵 Total Revenue",        f"${stats['total_revenue']:,.2f}", "#1abc9c"),
+    def refresh(e=None):
+        s = get_dashboard_stats()
+        row1.controls = [
+            stat_card("🚙 Total Vehículos",    s["total_vehicles"],       PRIMARY),
+            stat_card("✅ Disponibles",         s["available_vehicles"],   SUCCESS),
+            stat_card("🔑 Rentados",            s["rented_vehicles"],      WARNING),
         ]
+        row2.controls = [
+            stat_card("📅 Reservados",          s["reserved_vehicles"],    PURPLE),
+            stat_card("🔧 Mantenimiento",       s["maintenance_vehicles"], DANGER),
+            stat_card("👥 Clientes",            s["total_customers"],      "#2980b9"),
+        ]
+        row3.controls = [
+            stat_card("📋 Rentas Activas",      s["active_rentals"],       "#16a085"),
+            stat_card("🗓 Reservas Pendientes", s["pending_reservations"], "#d35400"),
+            stat_card("💵 Ingresos Totales",    f"${s['total_revenue']:,.2f}", "#1abc9c"),
+        ]
+        page.update()
 
-        cols = 3
-        for i, (label, value, color) in enumerate(cards):
-            row, col = divmod(i, cols)
-            card = tk.Frame(self.cards_frame, bg=color, bd=0, relief="flat",
-                            padx=20, pady=16)
-            card.grid(row=row, column=col, padx=12, pady=12, sticky="nsew")
+    refresh()
 
-            tk.Label(card, text=str(value), font=("Helvetica", 26, "bold"),
-                     bg=color, fg="white").pack()
-            tk.Label(card, text=label, font=("Helvetica", 11),
-                     bg=color, fg="#dddddd").pack()
-
-        for c in range(cols):
-            self.cards_frame.columnconfigure(c, weight=1)
+    return ft.Container(
+        content=ft.Column([
+            ft.Row([
+                section_title("🚗  Dashboard"),
+                primary_btn("⟳ Actualizar", refresh),
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ft.Divider(height=1, color=BORDER_COL),
+            ft.Text("Resumen de la flota", size=14, color=TEXT_MUTED),
+            row1, row2, row3,
+        ], spacing=16, scroll=ft.ScrollMode.AUTO),
+        bgcolor=BG, padding=24, expand=True,
+    )
